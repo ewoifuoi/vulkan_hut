@@ -5,6 +5,7 @@
 #include <fstream>
 #include <glm/ext/matrix_float4x4.hpp>
 #include <limits>
+#include <ostream>
 #include <set>
 #include <optional>
 #include <stdexcept>
@@ -19,6 +20,9 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>
+
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb/stb_image.h>
 
 #define DEBUG_LEVEL 3
 
@@ -175,6 +179,7 @@ private:
         createFramebuffers();// 将ImageView与render pass中的attachment一一绑定, 实现抽象attachment的实例化
 
         createCommandPool();// 创建 command pool需要指定 queue family
+        createTextureImage();
         createVertexBuffer();// 把系统内存中创建的vertices上传到GPU显存 vertexBuffer中
         createIndexBuffer();// 创建index buffer, 同vertex buffer
         createUniformBuffers(); // 为每个in-flight frame 创建一个uniform buffer, 并map到CPU的地址空间
@@ -1316,6 +1321,28 @@ private:
         vkDestroyInstance(instance, nullptr);
         glfwDestroyWindow(window);
         glfwTerminate();
+    }
+
+    void createTextureImage() {
+        int texWidth, texHeight, texChannels;
+        stbi_uc* pixels = stbi_load("../textures/texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        VkDeviceSize imageSize = texWidth * texHeight * 4;
+
+        if(!pixels) {
+            throw std::runtime_error("failed to load texture image!");
+        }
+
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+
+        createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+        void* data;
+        vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
+        memcpy(data, pixels, static_cast<size_t>(imageSize));
+        vkUnmapMemory(device, stagingBufferMemory);
+
+        stbi_image_free(pixels);
+
     }
 };
 
