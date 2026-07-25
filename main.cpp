@@ -165,7 +165,9 @@ private:
 
     VkImage textureImage;
     VkDeviceMemory textureImageMemory;
-    
+
+    VkImageView textureImageView;
+
     void initVulkan() {
         createInstance(); // 创建vulkan的instance(添加glfw的extension和validation layer)
         setupDebugMessenger();
@@ -183,6 +185,7 @@ private:
 
         createCommandPool();// 创建 command pool需要指定 queue family
         createTextureImage();
+        createTextureImageView();
         createVertexBuffer();// 把系统内存中创建的vertices上传到GPU显存 vertexBuffer中
         createIndexBuffer();// 创建index buffer, 同vertex buffer
         createUniformBuffers(); // 为每个in-flight frame 创建一个uniform buffer, 并map到CPU的地址空间
@@ -1277,6 +1280,8 @@ private:
 
         cleanupSwapChain();
 
+        vkDestroyImageView(device, textureImageView, nullptr);
+
         vkDestroyImage(device, textureImage, nullptr);
         vkFreeMemory(device, textureImageMemory, nullptr);
 
@@ -1326,9 +1331,6 @@ private:
         vkUnmapMemory(device, stagingBufferMemory);
 
         stbi_image_free(pixels);
-
-        VkImage textureImage;
-        VkDeviceMemory textureImageMemory;
 
         createImage(texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage, textureImageMemory);
 
@@ -1485,6 +1487,29 @@ private:
         );
 
         endSingleTimeCommand(commandBuffer);
+    }
+
+    void createTextureImageView() {
+        textureImageView = createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB);
+    }
+
+    VkImageView createImageView(VkImage image, VkFormat format) {
+        VkImageViewCreateInfo viewInfo{};
+        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewInfo.image = image;
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.format = format;
+        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        viewInfo.subresourceRange.baseMipLevel = 0;
+        viewInfo.subresourceRange.levelCount = 1;
+        viewInfo.subresourceRange.baseArrayLayer = 0;
+        viewInfo.subresourceRange.layerCount = 1;
+
+        VkImageView imageView;
+        if(VK_SUCCESS != vkCreateImageView(device, &viewInfo, nullptr, &imageView)) {
+            throw std::runtime_error("failed to create texture image view!");
+        }
+        return imageView;
     }
 
 };
