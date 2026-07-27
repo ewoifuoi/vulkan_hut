@@ -186,6 +186,7 @@ private:
         createCommandPool();// 创建 command pool需要指定 queue family
         createTextureImage();
         createTextureImageView();
+        createTextureSampler();
         createVertexBuffer();// 把系统内存中创建的vertices上传到GPU显存 vertexBuffer中
         createIndexBuffer();// 创建index buffer, 同vertex buffer
         createUniformBuffers(); // 为每个in-flight frame 创建一个uniform buffer, 并map到CPU的地址空间
@@ -1510,6 +1511,20 @@ private:
             throw std::runtime_error("failed to create texture image view!");
         }
         return imageView;
+    }
+
+    void createTextureSampler() {
+        VkSamplerCreateInfo samplerInfo{};
+        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        samplerInfo.magFilter = VK_FILTER_LINEAR;
+        samplerInfo.minFilter = VK_FILTER_LINEAR;
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.anisotropyEnable = VK_TRUE;
+        VkPhysicalDeviceProperties properties{};
+        vkGetPhysicalDeviceProperties(physicalDevice, &properties);
+        samplerInfo.maxAnisotropy - properties.limits.maxSamplerAnisropy;
     }
 
 };
