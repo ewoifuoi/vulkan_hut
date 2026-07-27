@@ -167,6 +167,7 @@ private:
     VkDeviceMemory textureImageMemory;
 
     VkImageView textureImageView;
+    VkSampler textureSampler;
 
     void initVulkan() {
         createInstance(); // 创建vulkan的instance(添加glfw的extension和validation layer)
@@ -1521,10 +1522,20 @@ private:
         samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
         samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
         samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        samplerInfo.anisotropyEnable = VK_TRUE;
+        samplerInfo.anisotropyEnable = VK_FALSE;
         VkPhysicalDeviceProperties properties{};
         vkGetPhysicalDeviceProperties(physicalDevice, &properties);
-        samplerInfo.maxAnisotropy - properties.limits.maxSamplerAnisropy;
+        samplerInfo.maxAnisotropy = 1.0f;
+        samplerInfo.unnormalizedCoordinates = VK_FALSE;
+        samplerInfo.compareEnable = VK_FALSE;
+        samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        samplerInfo.mipLodBias = 0.0f;
+        samplerInfo.minLod = 0.0f;
+        samplerInfo.maxLod = 0.0f;
+        if(VK_SUCCESS != vkCreateSampler(device, &samplerInfo, nullptr, &textureSampler)) {
+            throw std::runtime_error("failed to create texture sampler!");
+        }
     }
 
 };
