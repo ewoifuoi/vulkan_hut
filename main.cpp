@@ -59,6 +59,7 @@ struct SwapChainSupportDetails {
 struct Vertex {
     glm::vec3 pos;
     glm::vec4 color;
+    glm::vec2 texCoord;
 
     // 获取处理顶点时的 步长
     static VkVertexInputBindingDescription getBindingDescription() {
@@ -70,8 +71,8 @@ struct Vertex {
     }
 
     // 每个 28 字节内部数据分布
-    static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions() { // 有两部分数据(属性)
-        std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
+    static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescriptions() { // 有两部分数据(属性)
+        std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions{};
         attributeDescriptions[0].binding = 0;
         attributeDescriptions[0].location = 0;
         attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
@@ -81,28 +82,61 @@ struct Vertex {
         attributeDescriptions[1].location = 1;
         attributeDescriptions[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
         attributeDescriptions[1].offset = offsetof(Vertex, color);
+
+        attributeDescriptions[2].binding = 0;
+        attributeDescriptions[2].location = 2;
+        attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
+        attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
         return attributeDescriptions;
     }
 };
+
 const std::vector<Vertex> vertices = {
-    // 提高饱和度：非主色降为 0.0，主色微调至 0.45，保持整体亮度安全
-    {{-0.5f, -0.5f,  0.5f}, {0.00f, 0.00f, 0.45f, 0.9f}}, // 0 前左下 (纯净幽灵蓝)
-    {{ 0.5f, -0.5f,  0.5f}, {0.45f, 0.00f, 0.45f, 0.9f}}, // 1 前右下 (纯净幽灵洋红)
-    {{ 0.5f,  0.5f,  0.5f}, {0.35f, 0.35f, 0.45f, 0.9f}}, // 2 前右上 (幽灵白 - 微偏冷蓝以增加通透感)
-    {{-0.5f,  0.5f,  0.5f}, {0.00f, 0.45f, 0.45f, 0.9f}}, // 3 前左上 (纯净幽灵青)
-    {{-0.5f, -0.5f, -0.5f}, {0.01f, 0.01f, 0.04f, 0.9f}}, // 4 后左下 (暗微光 - 带有极弱的冷色调底色)
-    {{ 0.5f, -0.5f, -0.5f}, {0.45f, 0.00f, 0.00f, 0.9f}}, // 5 后右下 (纯净幽灵红)
-    {{ 0.5f,  0.5f, -0.5f}, {0.45f, 0.45f, 0.00f, 0.9f}}, // 6 后右上 (纯净幽灵黄)
-    {{-0.5f,  0.5f, -0.5f}, {0.00f, 0.45f, 0.00f, 0.9f}}  // 7 后左上 (纯净幽灵绿)
+    // ==================== 前面 z = +0.5 ====================
+    {{-0.5f, -0.5f,  0.5f}, {0.00f, 0.00f, 0.45f, 0.9f}, {1.0f, 0.0f}}, // 0  左下
+    {{ 0.5f, -0.5f,  0.5f}, {0.45f, 0.00f, 0.45f, 0.9f}, {0.0f, 0.0f}}, // 1  右下
+    {{ 0.5f,  0.5f,  0.5f}, {0.35f, 0.35f, 0.45f, 0.9f}, {0.0f, 1.0f}}, // 2  右上
+    {{-0.5f,  0.5f,  0.5f}, {0.00f, 0.45f, 0.45f, 0.9f}, {1.0f, 1.0f}}, // 3  左上
+
+    // ==================== 后面 z = -0.5 ====================
+    // 从立方体外部看后表面
+    {{ 0.5f, -0.5f, -0.5f}, {0.45f, 0.00f, 0.00f, 0.9f}, {1.0f, 0.0f}}, // 4  左下
+    {{-0.5f, -0.5f, -0.5f}, {0.01f, 0.01f, 0.04f, 0.9f}, {0.0f, 0.0f}}, // 5  右下
+    {{-0.5f,  0.5f, -0.5f}, {0.00f, 0.45f, 0.00f, 0.9f}, {0.0f, 1.0f}}, // 6  右上
+    {{ 0.5f,  0.5f, -0.5f}, {0.45f, 0.45f, 0.00f, 0.9f}, {1.0f, 1.0f}}, // 7  左上
+
+    // ==================== 左面 x = -0.5 ====================
+    {{-0.5f, -0.5f, -0.5f}, {0.01f, 0.01f, 0.04f, 0.9f}, {1.0f, 0.0f}}, // 8
+    {{-0.5f, -0.5f,  0.5f}, {0.00f, 0.00f, 0.45f, 0.9f}, {0.0f, 0.0f}}, // 9
+    {{-0.5f,  0.5f,  0.5f}, {0.00f, 0.45f, 0.45f, 0.9f}, {0.0f, 1.0f}}, // 10
+    {{-0.5f,  0.5f, -0.5f}, {0.00f, 0.45f, 0.00f, 0.9f}, {1.0f, 1.0f}}, // 11
+
+    // ==================== 右面 x = +0.5 ====================
+    {{ 0.5f, -0.5f,  0.5f}, {0.45f, 0.00f, 0.45f, 0.9f}, {1.0f, 0.0f}}, // 12
+    {{ 0.5f, -0.5f, -0.5f}, {0.45f, 0.00f, 0.00f, 0.9f}, {0.0f, 0.0f}}, // 13
+    {{ 0.5f,  0.5f, -0.5f}, {0.45f, 0.45f, 0.00f, 0.9f}, {0.0f, 1.0f}}, // 14
+    {{ 0.5f,  0.5f,  0.5f}, {0.35f, 0.35f, 0.45f, 0.9f}, {1.0f, 1.0f}}, // 15
+
+    // ==================== 上面 y = +0.5 ====================
+    {{-0.5f,  0.5f,  0.5f}, {0.00f, 0.45f, 0.45f, 0.9f}, {1.0f, 0.0f}}, // 16
+    {{ 0.5f,  0.5f,  0.5f}, {0.35f, 0.35f, 0.45f, 0.9f}, {0.0f, 0.0f}}, // 17
+    {{ 0.5f,  0.5f, -0.5f}, {0.45f, 0.45f, 0.00f, 0.9f}, {0.0f, 1.0f}}, // 18
+    {{-0.5f,  0.5f, -0.5f}, {0.00f, 0.45f, 0.00f, 0.9f}, {1.0f, 1.0f}}, // 19
+
+    // ==================== 下面 y = -0.5 ====================
+    {{-0.5f, -0.5f, -0.5f}, {0.01f, 0.01f, 0.04f, 0.9f}, {1.0f, 0.0f}}, // 20
+    {{ 0.5f, -0.5f, -0.5f}, {0.45f, 0.00f, 0.00f, 0.9f}, {0.0f, 0.0f}}, // 21
+    {{ 0.5f, -0.5f,  0.5f}, {0.45f, 0.00f, 0.45f, 0.9f}, {0.0f, 1.0f}}, // 22
+    {{-0.5f, -0.5f,  0.5f}, {0.00f, 0.00f, 0.45f, 0.9f}, {1.0f, 1.0f}}, // 23
 };
 
 const std::vector<uint16_t> indices = {
-    0, 1, 2, 2, 3, 0, // 前
-    5, 4, 7, 7, 6, 5, // 后
-    4, 0, 3, 3, 7, 4, // 左
-    1, 5, 6, 6, 2, 1, // 右
-    3, 2, 6, 6, 7, 3, // 上
-    4, 5, 1, 1, 0, 4  // 下
+     0,  1,  2,   2,  3,  0, // 前面
+     4,  5,  6,   6,  7,  4, // 后面
+     8,  9, 10,  10, 11,  8, // 左面
+    12, 13, 14,  14, 15, 12, // 右面
+    16, 17, 18,  18, 19, 16, // 上面
+    20, 21, 22,  22, 23, 20  // 下面
 };
 
 struct UniformBufferObject {
@@ -170,29 +204,29 @@ private:
     VkSampler textureSampler;
 
     void initVulkan() {
-        createInstance(); // 创建vulkan的instance(添加glfw的extension和validation layer)
+        createInstance();
         setupDebugMessenger();
-        createSurface(); // surface用来绑定vulkan instance和window
-        pickPhysicalDevice();// 挑选一个最合适的显卡
-        createLogicalDevice();// 创建逻辑设备, 获取graphics queue 和 present queue
+        createSurface();
+        pickPhysicalDevice();
+        createLogicalDevice();
 
-        createSwapChain(); // 创建swapChain, 得到一组Images (即数据载体)
-        createImageViews(); // 每个Image绑定一个Image View, 即如何处理数据
-        createRenderPass(); // 指定渲染目的地和子过程(要不要提前清空屏幕)
+        createSwapChain();
+        createImageViews();
+        createRenderPass();
 
-        createDescriptorSetLayout();// 资源描述符的布局, 告诉shader资源在哪里(uniform buffer)
-        createGraphicsPipeline();// 创建图形管线
-        createFramebuffers();// 将ImageView与render pass中的attachment一一绑定, 实现抽象attachment的实例化
+        createDescriptorSetLayout();
+        createGraphicsPipeline();
+        createFramebuffers();
 
-        createCommandPool();// 创建 command pool需要指定 queue family
+        createCommandPool();
         createTextureImage();
         createTextureImageView();
         createTextureSampler();
-        createVertexBuffer();// 把系统内存中创建的vertices上传到GPU显存 vertexBuffer中
-        createIndexBuffer();// 创建index buffer, 同vertex buffer
-        createUniformBuffers(); // 为每个in-flight frame 创建一个uniform buffer, 并map到CPU的地址空间
+        createVertexBuffer();
+        createIndexBuffer();
+        createUniformBuffers();
         createDescriptorPool();
-        createDescriptorSets();// 在descriptor pool中为每个帧分配 descriptor set, 并将其中的binding=0指向对应的uniform buffer
+        createDescriptorSets();
 
         createCommandBuffer();
         createSyncObjects();
@@ -1201,6 +1235,7 @@ private:
         VkDescriptorSetLayoutBinding samplerLayoutBinding{};
         samplerLayoutBinding.binding = 1;
         samplerLayoutBinding.descriptorCount = 1;
+        samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         samplerLayoutBinding.pImmutableSamplers = nullptr;
         samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
