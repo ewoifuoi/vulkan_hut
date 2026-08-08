@@ -1,3 +1,4 @@
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -29,8 +30,8 @@
 
 #define DEBUG_LEVEL 3
 
-constexpr uint32_t WIDTH = 800;
-constexpr uint32_t HEIGHT = 600;
+constexpr uint32_t WIDTH = 1000;
+constexpr uint32_t HEIGHT = 800;
 
 const std::string MODEL_PATH = "../models/viking_room.obj";
 const std::string TEXTURE_PATH = "../textures/viking_room.png";
@@ -773,7 +774,7 @@ private:
         // Color blend
         VkPipelineColorBlendAttachmentState colorBlendAttachment{};
         colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;// 决定哪些颜色通道允许写入framebuffer
-        colorBlendAttachment.blendEnable = VK_TRUE;// 开启颜色混合
+        colorBlendAttachment.blendEnable = VK_FALSE;// 开启颜色混合
         // 开启blending后, 最终颜色由 fragment shader 当前输出 + color attachment中已有颜色 按规则混合得到
         // 加法混合：
         // final.rgb = src.rgb * src.a + dst.rgb
