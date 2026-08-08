@@ -1,3 +1,4 @@
+#include <glm/ext/vector_float3.hpp>
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <algorithm>
 #include <array>
@@ -103,6 +104,50 @@ struct UniformBufferObject {
     glm::mat4 model;
     glm::mat4 view;
     glm::mat4 proj;
+};
+
+struct Ray {
+    glm::vec3 origin;
+    glm::vec3 direction;
+};
+
+struct AABB {
+    glm::vec3 lo = glm::vec3(std::numeric_limits<float>::max());
+    glm::vec3 hi = glm::vec3(std::numeric_limits<float>::lowest());
+
+    void expand(const glm::vec3& p) {
+        lo = glm::min(lo, p);
+        hi = glm::max(hi, p);
+    }
+    
+    void expand(const AABB& other) {
+        expand(other.lo);
+        expand(other.hi);
+    }
+};
+
+struct BVHPrimitive {
+    uint32_t triangle = 0;
+    AABB bounds;
+    glm::vec3 centroid{0.0f};
+};
+
+struct BVHNode {
+    AABB boudns;
+    uint32_t left = UINT32_MAX;
+    uint32_t right = UINT32_MAX;
+    uint32_t first = 0;
+    uint32_t count = 0;
+    bool isLeaf() const {
+        return count > 0;
+    }
+};
+
+struct PickHit {
+    bool hit = false;
+    float distance = std::numeric_limits<float>::max();
+    uint32_t triange = UINT32_MAX;
+    glm::vec3 worldPosition{0.0f};
 };
 
 #ifdef NDEBUG
