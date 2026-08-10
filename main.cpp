@@ -1,5 +1,5 @@
-#include <glm/ext/vector_float3.hpp>
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#include <glm/ext/vector_float3.hpp>
 #include <algorithm>
 #include <array>
 #include <cmath>
