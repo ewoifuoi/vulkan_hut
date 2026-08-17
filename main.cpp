@@ -1,3 +1,4 @@
+#include <glm/ext/quaternion_geometric.hpp>
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/ext/vector_float3.hpp>
 #include <algorithm>
@@ -22,6 +23,7 @@
 #include <vector>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <chrono>
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -220,6 +222,23 @@ private:
     VkImage colorImage;
     VkDeviceMemory colorImageMemory;
     VkImageView colorImageView;
+
+    std::vector<BVHPrimitive> bvhPrimitive;
+    std::vector<BVHNode> bvhNodes;
+
+    glm::vec3 modelPivot{0.0f};
+    float modelRadius = 1.0f;
+    glm::quat modelRotation{1.0f, 0.0f, 0.0f, 0.0f};
+
+    glm::vec3 cameraDirection = glm::normalize(glm::vec3(1.0f, 1.0f, 1.0f));
+    float minCameraDistance = 0.1f;
+    float maxCameraDistance = 100.0f;
+
+    bool rotatingModel = false;
+    glm::vec3 dragStartBall{0.0f};
+    glm::quat dragStartRotation{1.0f, 0.0f, 0.0f, 0.0f};
+
+    uint32_t selectedTriangle = UINT32_MAX;
 
     void initVulkan() {
         createInstance();
