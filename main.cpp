@@ -288,6 +288,10 @@ private:
         window = glfwCreateWindow(WIDTH, HEIGHT, "vulkan", nullptr, nullptr);// 创建窗口获得窗口句柄
         glfwSetWindowUserPointer(window, this);// 把 this指针塞进 window 对象
         glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);// 注册:窗口大小改变回调函数
+
+        glfwSetMouseButtonCallback(window, mouseButtonCallback);
+        glfwSetCursorPosCallback(window, cursorPositionCallback);
+        glfwSetScrollCallback(window, scrollCallback    );
     }
 
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
@@ -2031,8 +2035,250 @@ private:
         ray.origin = glm::vec3(nearPosition);
         ray.direction = glm::normalize(glm::vec3(farPosition - nearPosition));
         return ray;
-}
+    }
 
+    bool intersectAABB(
+        const Ray& ray,
+        const AABB& box,
+        float maximumDistance
+    ) const {
+        float tMin = 0.0f;
+        float tMax = maximumDistance;
+        for (int axis = 0; axis < 3; ++axis) {
+            float origin = ray.origin[axis];
+            float direction = ray.direction[axis];
+            if (std::abs(direction) < 1e-8f) {
+                if (origin < box.lo[axis] ||
+                    origin > box.hi[axis]) {
+                    return false;
+                }
+                continue;
+            }
+            float t0 = (box.lo[axis] - origin) / direction;
+            float t1 = (box.hi[axis] - origin) / direction;
+            if (t0 > t1) {
+                std::swap(t0, t1);
+            }
+            tMin = std::max(tMin, t0);
+            tMax = std::min(tMax, t1);
+            if (tMin > tMax) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool intersectTriangle(
+        const Ray& ray,
+        uint32_t triangle,
+        float& resultDistance
+    ) const {
+        const glm::vec3& p0 = vertices[indices[triangle * 3 + 0]].pos;
+        const glm::vec3& p1 = vertices[indices[triangle * 3 + 1]].pos;
+        const glm::vec3& p2 = vertices[indices[triangle * 3 + 2]].pos;
+
+        glm::vec3 edge1 = p1 - p0;
+        glm::vec3 edge2 = p2 - p0;
+
+        glm::vec3 p = glm::cross(ray.direction, edge2);
+        float determinant = glm::dot(edge1, p);
+
+        if (std::abs(determinant) < 1e-8f) {
+            return false;
+        }
+
+        float inverseDeterminant = 1.0f / determinant;
+
+        glm::vec3 t = ray.origin - p0;
+        float u = glm::dot(t, p) * inverseDeterminant;
+
+        if (u < 0.0f || u > 1.0f) {
+            return false;
+        }
+        glm::vec3 q = glm::cross(t, edge1);
+        float v = glm::dot(ray.direction, q) * inverseDeterminant;
+        if (v < 0.0f || u + v > 1.0f) {
+            return false;
+        }
+        float distance =
+            glm::dot(edge2, q) * inverseDeterminant;
+        if (distance <= 1e-5f) {
+            return false;
+        }
+        resultDistance = distance;
+        return true;
+    }
+
+    PickHit pickModel(double cursorX, double cursorY) const {
+        PickHit result{};
+
+        if (bvhNodes.empty()) {
+            return result;
+        }
+
+        Ray worldRay = makeWorldRay(cursorX, cursorY);
+
+        glm::mat4 inverseModel =
+        glm::inverse(getModelMatrix());
+
+        Ray localRay{};
+        localRay.origin = glm::vec3(inverseModel * glm::vec4(worldRay.origin, 1.0f));
+
+        localRay.direction = glm::vec3(inverseModel * glm::vec4(worldRay.direction, 0.0f));
+
+        std::vector<uint32_t> stack;
+        stack.push_back(0);
+
+        while (!stack.empty()) {
+            uint32_t nodeIndex = stack.back();
+            stack.pop_back();
+        
+            const BVHNode& node = bvhNodes[nodeIndex];
+        
+            if (!intersectAABB(localRay, node.bounds, result.distance)) {
+                continue;
+            }
+        
+            if (node.isLeaf()) {
+                for (uint32_t i = 0; i < node.count; ++i) {
+                    const BVHPrimitive& primitive = bvhPrimitives[node.first + i];
+
+                    float distance = 0.0f;
+
+                    if (intersectTriangle(
+                            localRay,
+                            primitive.triangle,
+                            distance) &&
+                        distance < result.distance) {
+                        result.hit = true;
+                        result.distance = distance;
+                        result.triangle =
+                            primitive.triangle;
+                    }
+                }
+            } else {
+                stack.push_back(node.left);
+                stack.push_back(node.right);
+            }
+        }
+
+        if (result.hit) {
+            result.worldPosition = worldRay.origin + worldRay.direction * result.distance;
+        }
+
+        return result;
+    }
+
+    glm::vec3 mapToArcball(double cursorX, double cursorY) const {
+        int width = 1;
+        int height = 1;
+        glfwGetWindowSize(window, &width, &height);
+
+        float size = static_cast<float>(
+            std::max(1, std::min(width, height))
+        );
+
+        float x = (static_cast<float>(cursorX) - static_cast<float>(width) * 0.5f ) / (size * 0.5f);
+	    float y = (static_cast<float>(height)  * 0.5f - static_cast<float>(cursorY)) / (size * 0.5f);
+
+        float lengthSquared = x * x + y * y;
+
+        if (lengthSquared <= 1.0f) {
+            return glm::vec3(x, y, std::sqrt(1.0f - lengthSquared));
+        }
+
+        return glm::normalize(glm::vec3(x, y, 0.0f));
+    }
+
+    static void mouseButtonCallback(
+        GLFWwindow* window,
+        int button,
+        int action,
+        int mods
+    ) {
+        auto* app = reinterpret_cast<VulkanHut*>(
+            glfwGetWindowUserPointer(window)
+        );
+        if (button != GLFW_MOUSE_BUTTON_LEFT) {
+            return;
+        }
+        if (action == GLFW_PRESS) {
+            double cursorX = 0.0;
+            double cursorY = 0.0;
+            glfwGetCursorPos(window, &cursorX, &cursorY);
+
+            PickHit hit = app->pickModel(cursorX, cursorY);
+
+            if (hit.hit) {
+                app->rotatingModel = true;
+                app->selectedTriangle = hit.triangle;
+                app->dragStartBall = app->mapToArcball(cursorX, cursorY);
+                app->dragStartRotation = app->modelRotation;
+            }
+        }
+
+        if (action == GLFW_RELEASE) {
+            app->rotatingModel = false;
+        }
+    }
+
+    static void cursorPositionCallback(
+        GLFWwindow* window,
+        double cursorX,
+        double cursorY
+    ) {
+        auto* app = reinterpret_cast<VulkanHut*>(
+            glfwGetWindowUserPointer(window)
+        );
+
+        if (!app->rotatingModel) {
+            return;
+        }
+
+        glm::vec3 currentBall = app->mapToArcball(cursorX, cursorY);
+        glm::vec3 cameraAxis = glm::cross(app->dragStartBall, currentBall);
+
+        float axisLength = glm::length(cameraAxis);
+        if (axisLength < 1e-6f) {
+            app->modelRotation =
+                app->dragStartRotation;
+            return;
+        }
+        cameraAxis /= axisLength;
+        float angle = std::acos(std::clamp(
+            glm::dot(app->dragStartBall, currentBall),
+            -1.0f,
+            1.0f
+        ));
+        glm::vec3 worldAxis = glm::normalize(
+            glm::mat3(glm::inverse(app->getViewMatrix())) *
+            cameraAxis
+        );
+        glm::quat deltaRotation = glm::angleAxis(angle, worldAxis);
+        app->modelRotation = glm::normalize(deltaRotation * app->dragStartRotation);
+    }
+
+    static void scrollCallback(
+        GLFWwindow* window,
+        double xOffset,
+        double yOffset
+    ) {
+        auto* app = reinterpret_cast<VulkanHut*>(
+            glfwGetWindowUserPointer(window)
+        );
+
+        (void)xOffset;
+
+        app->cameraDistance *= std::exp(
+            -0.12f * static_cast<float>(yOffset)
+        );
+
+        app->cameraDistance = std::clamp(
+            app->cameraDistance,
+            app->minCameraDistance,
+            app->maxCameraDistance
+        );
+    }
 };
 
 int main() {
