@@ -1,3 +1,5 @@
+#include <glm/ext/matrix_clip_space.hpp>
+#include <glm/ext/matrix_transform.hpp>
 #include <glm/ext/quaternion_geometric.hpp>
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/ext/vector_float3.hpp>
@@ -135,7 +137,7 @@ struct BVHPrimitive {
 };
 
 struct BVHNode {
-    AABB boudns;
+    AABB bounds;
     uint32_t left = UINT32_MAX;
     uint32_t right = UINT32_MAX;
     uint32_t first = 0;
@@ -148,7 +150,7 @@ struct BVHNode {
 struct PickHit {
     bool hit = false;
     float distance = std::numeric_limits<float>::max();
-    uint32_t triange = UINT32_MAX;
+    uint32_t triangle = UINT32_MAX;
     glm::vec3 worldPosition{0.0f};
 };
 
@@ -223,7 +225,7 @@ private:
     VkDeviceMemory colorImageMemory;
     VkImageView colorImageView;
 
-    std::vector<BVHPrimitive> bvhPrimitive;
+    std::vector<BVHPrimitive> bvhPrimitives;
     std::vector<BVHNode> bvhNodes;
 
     glm::vec3 modelPivot{0.0f};
@@ -231,6 +233,8 @@ private:
     glm::quat modelRotation{1.0f, 0.0f, 0.0f, 0.0f};
 
     glm::vec3 cameraDirection = glm::normalize(glm::vec3(1.0f, 1.0f, 1.0f));
+
+    float cameraDistance = 3.464f;
     float minCameraDistance = 0.1f;
     float maxCameraDistance = 100.0f;
 
@@ -262,6 +266,9 @@ private:
         createTextureImageView();
         createTextureSampler();
         loadModel();
+
+        buildBVH();
+
         createVertexBuffer();
         createIndexBuffer();
         createUniformBuffers();
@@ -1364,10 +1371,15 @@ private:
         float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
         UniformBufferObject ubo{};
 
-        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(50.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float) swapChainExtent.height, 0.1f, 10.0f);
-        ubo.proj[1][1] *= -1;
+        // ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(50.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        // ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        // ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float) swapChainExtent.height, 0.1f, 10.0f);
+        // ubo.proj[1][1] *= -1;
+
+        ubo.model = getModelMatrix() * glm::rotate(glm::mat4(1.0f), time * glm::radians(20.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo.view = getViewMatrix();
+        ubo.proj = getProjectionMatrix();
+
         memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
     }
 
@@ -1852,6 +1864,174 @@ private:
         createImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorImage, colorImageMemory);
         colorImageView = createImageView(colorImage, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
     }
+
+    uint32_t buildBVHNode(uint32_t first, uint32_t count) {
+        const uint32_t nodeIndex = static_cast<uint32_t>(bvhNodes.size());
+        bvhNodes.emplace_back();
+
+        AABB nodeBounds;
+        AABB centroidBounds;
+
+        for(uint32_t i = first; i < first + count; ++i) {
+            nodeBounds.expand(bvhPrimitives[i].bounds);
+            centroidBounds.expand(bvhPrimitives[i].centroid);
+        }
+        bvhNodes[nodeIndex].bounds = nodeBounds;
+
+        constexpr uint32_t LEAF_TRIANGLE_COUNT = 8;
+
+        glm::vec3 extent = centroidBounds.hi - centroidBounds.lo;
+
+        int splitAxis = 0;
+        if(extent.y > extent.x) {
+            splitAxis = 1;
+        }
+        if(extent.z > extent[splitAxis]) {
+            splitAxis = 2;
+        }
+
+        if(count <= LEAF_TRIANGLE_COUNT || extent[splitAxis] < 1e-6f) {
+           bvhNodes[nodeIndex].first = first;
+           bvhNodes[nodeIndex].count = count;
+           return nodeIndex;
+        }
+
+        const uint32_t middle = first + count / 2;
+
+        std::nth_element(
+            bvhPrimitives.begin() + first,
+            bvhPrimitives.begin() + middle,
+            bvhPrimitives.begin() + first + count,
+            [splitAxis](const BVHPrimitive& a,
+                const BVHPrimitive& b) {
+                return a.centroid[splitAxis] < b.centroid[splitAxis];
+            }
+        );
+
+        const uint32_t left = buildBVHNode(first, middle - first);
+        const uint32_t right = buildBVHNode(middle, first + count - middle);
+
+        bvhNodes[nodeIndex].left = left;
+        bvhNodes[nodeIndex].right = right;
+
+        return nodeIndex;
+    }
+
+    void buildBVH() {
+        if(indices.empty() || indices.size() % 3 != 0) {
+            throw std::runtime_error("model does not contain valid");
+        }
+        bvhPrimitives.clear();
+        bvhNodes.clear();
+
+        const uint32_t triangleCount = static_cast<uint32_t>(indices.size() / 3);
+
+        bvhPrimitives.reserve(triangleCount);
+        bvhNodes.reserve(triangleCount * 2);
+
+        for(uint32_t triangle = 0; triangle < triangleCount; ++triangle) {
+            const glm::vec3& p0 = vertices[indices[triangle * 3 + 0]].pos;
+            const glm::vec3& p1 = vertices[indices[triangle * 3 + 1]].pos;
+            const glm::vec3& p2 = vertices[indices[triangle * 3 + 2]].pos;
+
+            BVHPrimitive primitive{};
+            primitive.triangle = triangle;
+            primitive.bounds.expand(p0);
+            primitive.bounds.expand(p1);
+            primitive.bounds.expand(p2);
+            primitive.centroid = (p0 + p1 + p2) / 3.0f;
+
+            bvhPrimitives.push_back(primitive);
+        }
+
+        const uint32_t root = buildBVHNode(0, triangleCount);
+        const AABB& modelBounds = bvhNodes[root].bounds;
+        modelPivot = (modelBounds.lo + modelBounds.hi) * 0.5f;
+        modelRadius = glm::length(modelBounds.hi - modelBounds.lo) * 0.5f;
+        modelRadius = std::max(modelRadius, 0.001f);
+        cameraDistance = modelRadius * 3.0f;
+        minCameraDistance = modelRadius * 1.05f;
+        maxCameraDistance = modelRadius * 100.0f;
+    }
+
+    glm::mat4 getModelMatrix() const {
+        return
+            glm::translate(glm::mat4(1.0f), modelPivot) *
+            glm::mat4_cast(modelRotation) *
+            glm::translate(glm::mat4(1.0f), -modelPivot
+        );
+    }
+
+    glm::mat4 getViewMatrix() const {
+        glm::vec3 cameraPosition = modelPivot + cameraDirection * cameraDistance;
+        return glm::lookAt(
+            cameraPosition,
+            modelPivot, 
+            glm::vec3(0.0f, 0.0f, 1.0f)
+        );
+    }
+
+    glm::mat4 getProjectionMatrix() const {
+        float aspect = 
+            static_cast<float>(swapChainExtent.width) / 
+            static_cast<float>(std::max(1u, swapChainExtent.height)
+        );
+
+        float zNear = std::max(
+            0.001f,
+            cameraDistance - modelRadius * 2.0f
+        );
+
+        float zFar = std::max(
+            zNear + 1.0f,
+            cameraDistance + modelRadius * 2.0f
+        );
+
+        glm::mat4 projection = glm::perspective(
+            glm::radians(45.0f),
+            aspect,
+            zNear,
+            zFar
+        );
+
+        projection[1][1] *= -1.0f;
+
+        return projection;
+    }
+
+    Ray makeWorldRay(double cursorX, double cursorY) const {
+        int windowWidth = 1;
+        int windowHeight = 1;
+        int framebufferWidth = 1;
+        int framebufferHeight = 1;
+        glfwGetWindowSize(
+            window,
+            &windowWidth,
+            &windowHeight
+        );
+
+        glfwGetFramebufferSize(
+            window,
+            &framebufferWidth,
+            &framebufferHeight
+        );
+
+        double pixelX = cursorX * framebufferWidth / windowWidth;
+        double pixelY = cursorY * framebufferHeight / windowHeight;
+        float ndcX = 2.0f * static_cast<float>(pixelX) / framebufferWidth - 1.0f;
+        float ndcY = 2.0f * static_cast<float>(pixelY) / framebufferHeight - 1.0f;
+        glm::mat4 inversePV = glm::inverse(
+            getProjectionMatrix() * getViewMatrix()
+        );
+        glm::vec4 nearPosition = inversePV * glm::vec4(ndcX, ndcY, 0.0f, 1.0f);
+        glm::vec4 farPosition = inversePV * glm::vec4(ndcX, ndcY, 1.0f, 1.0f);
+        nearPosition /= nearPosition.w;
+        farPosition /= farPosition.w;
+        Ray ray{};
+        ray.origin = glm::vec3(nearPosition);
+        ray.direction = glm::normalize(glm::vec3(farPosition - nearPosition));
+        return ray;
+}
 
 };
 
