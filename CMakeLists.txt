@@ -6,10 +6,13 @@ set(CMAKE_CXX_STANDARD 17)
 # 查找依赖包
 find_package(Vulkan REQUIRED)
 find_package(glfw3 REQUIRED)
+find_package(Freetype REQUIRED)# 添加可执行文件
 
-# 添加可执行文件
 add_executable(vulkan_hut main.cpp)
 
 # 链接库
-target_link_libraries(vulkan_hut Vulkan::Vulkan glfw)
-
+target_link_libraries(vulkan_hut PRIVATE
+    Vulkan::Vulkan
+    glfw
+    Freetype::Freetype
+)
