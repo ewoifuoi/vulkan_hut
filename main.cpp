@@ -44,11 +44,11 @@ constexpr uint32_t HEIGHT = 1000;
 
 const std::string MODEL_PATH = "../models/viking_room.obj";
 const std::string TEXTURE_PATH = "../textures/viking_room.png";
-const std::string FONT_PATH = "../fonts/JetBrainsMono-Regular.ttf";
+const std::string FONT_PATH = "../fonts/RibeyeMarrow-Regular.ttf";
 
 constexpr uint32_t FONT_ATLAS_WIDTH = 1024;
 constexpr uint32_t FONT_ATLAS_HEIGHT = 512;
-constexpr uint32_t FONT_PIXEL_SIZE = 28;
+constexpr uint32_t FONT_PIXEL_SIZE = 35;
 constexpr size_t MAX_UI_VERTICES = 4096;
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
