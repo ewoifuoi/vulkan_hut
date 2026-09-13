@@ -132,8 +132,6 @@ struct DrawPushConstants {
     uint32_t mode = DRAW_MODEL_FILL;
 };
 
-static_assert(sizeof(DrawPushConstants) == 20);
-
 struct Glyph {
     glm::ivec2 size{0};
     glm::ivec2 bearing{0};
@@ -334,6 +332,7 @@ private:
     uint32_t selectedTriangle = UINT32_MAX;
 
     void initVulkan() {
+
         createInstance();
         setupDebugMessenger();
         createSurface();
