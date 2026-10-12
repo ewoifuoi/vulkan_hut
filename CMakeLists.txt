@@ -8,6 +8,8 @@ find_package(Vulkan REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(Freetype REQUIRED)# 添加可执行文件
 
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/tinyobjloader)
+
 add_executable(vulkan_hut main.cpp)
 
 # 链接库
